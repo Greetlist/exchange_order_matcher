@@ -6,7 +6,7 @@ Matcher::Matcher(std::string&& path, std::string&& uid, std::string&& exchange, 
 Matcher::~Matcher() {
   match_thread_.join();
   read_order_thread_.join();
-  std::cout << "Order Queue len is: " << order_queue_.size() << std::endl;
+  std::cout << "[destructor] Order Queue len is: " << order_queue_.size() << std::endl;
   std::cout << "Quit Matcher" << std::endl;
 }
 
@@ -16,6 +16,17 @@ void Matcher::Start() {
 }
 
 void Matcher::Stop() {
+  while (true) {
+    std::unique_lock<std::mutex> inner_lock(cv_mutex_);
+    if (!order_queue_.empty()) {
+      cv_.notify_all();
+      std::cout << "[Stop] Order Queue len is: " << order_queue_.size() << std::endl;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    } else {
+      std::cout << "[Stop] Order Queue len is: " << order_queue_.size() << std::endl;
+      break;
+    }
+  }
   stop_ = true;
   std::unique_lock<std::mutex> lk(cv_mutex_);
   cv_.notify_all();
@@ -40,12 +51,16 @@ void Matcher::PrintOrderDepth() {
 
   std::cout << "---------------------------------" << std::endl;
   m.clear();
+  v.clear();
   for (const auto& [price, order] : buy_) {
     m[price] += order.GetVolume();
   }
 
   for (const auto& [price, volume] : m) {
-    std::cout << price << "     " << volume << std::endl;
+    v.emplace_back(price, volume);
+  }
+  for (int i = v.size()-1; i >= 0; --i) {
+    std::cout << v[i].first << "     " << v[i].second << std::endl;
   }
   std::cout << "=================================" << std::endl;
 }
@@ -96,7 +111,8 @@ void Matcher::Match() {
         }
         int left_volume = order.GetVolume();
         while (order.GetPrice() <= bid_iter->first) { //can match
-          auto [buy_order_begin, buy_order_end] = sell_.equal_range(bid_iter->first);
+          std::cout << "buy first: " << bid_iter->first << std::endl;
+          auto [buy_order_begin, buy_order_end] = buy_.equal_range(bid_iter->first);
           for (; buy_order_begin != buy_order_end;) {
             int cur_volume = buy_order_begin->second.GetVolume();
             if (left_volume >= cur_volume) {
@@ -156,14 +172,14 @@ void Matcher::ReadOrderData() {
     {"600759", "SH", "10007", OrderDirection::Sell, 2.56, 1000},
     {"600759", "SH", "10008", OrderDirection::Sell, 2.57, 1000},
     {"600759", "SH", "10009", OrderDirection::Sell, 2.58, 1000},
-    {"600759", "SH", "10010", OrderDirection::Buy, 2.56, 2200}
+    {"600759", "SH", "10010", OrderDirection::Buy, 2.56, 2200},
+    {"600759", "SH", "10011", OrderDirection::Sell, 2.51, 3200}
   };
-  while (!stop_) {
-    for (auto& o : ov) {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-      std::unique_lock<std::mutex> lk(cv_mutex_);
-      order_queue_.push_back(std::move(o));
-      cv_.notify_one();
-    }
+
+  for (auto& o : ov) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::unique_lock<std::mutex> lk(cv_mutex_);
+    order_queue_.push_back(std::move(o));
+    cv_.notify_one();
   }
 }
