@@ -6,6 +6,7 @@ Matcher::Matcher(std::string&& path, std::string&& uid, std::string&& exchange, 
 Matcher::~Matcher() {
   match_thread_.join();
   read_order_thread_.join();
+  std::cout << "Order Queue len is: " << order_queue_.size() << std::endl;
   std::cout << "Quit Matcher" << std::endl;
 }
 
@@ -37,6 +38,7 @@ void Matcher::PrintOrderDepth() {
     std::cout << v[i].first << "     " << v[i].second << std::endl;
   }
 
+  std::cout << "---------------------------------" << std::endl;
   m.clear();
   for (const auto& [price, order] : buy_) {
     m[price] += order.GetVolume();
@@ -55,11 +57,11 @@ void Matcher::Match() {
     while (!order_queue_.empty()) {
       Order order = order_queue_.front();
       order_queue_.pop_front();
+      std::cout << "price:" << order.GetPrice() << ", Direction: " << static_cast<std::underlying_type_t<OrderDirection>>(order.GetDirection()) << std::endl;
       auto bid_iter = buy_.begin()++;
       auto ask_iter = sell_.begin()++;
 
       if (order.GetDirection() == OrderDirection::Buy) {
-        std::cout << "price:" << order.GetPrice() << ", " << ask_iter->first << std::endl;
         int left_volume = order.GetVolume();
         if (ask_iter == sell_.end() || order.GetPrice() < ask_iter->first) {
           buy_.emplace(order.GetPrice(), order);
@@ -69,6 +71,7 @@ void Matcher::Match() {
           auto [sell_order_begin, sell_order_end] = sell_.equal_range(ask_iter->first);
           for (; sell_order_begin != sell_order_end;) {
             int cur_volume = sell_order_begin->second.GetVolume();
+            std::cout << "cur volume: " << cur_volume << std::endl;
             if (left_volume >= cur_volume) {
               left_volume -= cur_volume;
               sell_order_begin = sell_.erase(sell_order_begin);
@@ -79,7 +82,7 @@ void Matcher::Match() {
             }
           }
           if (left_volume <= 0) break;
-          ask_iter++;
+          ask_iter = sell_.begin();
         }
 
         if (left_volume > 0) {
@@ -106,7 +109,7 @@ void Matcher::Match() {
             }
           }
           if (left_volume <= 0) break;
-          bid_iter++;
+          bid_iter = buy_.begin();
         }
 
         if (left_volume > 0) {
@@ -144,21 +147,21 @@ void Matcher::AcceptOrder(const Order&& o) {
 void Matcher::ReadOrderData() {
   std::vector<Order> ov {
     {"600759", "SH", "10000", OrderDirection::Buy, 2.49, 1000},
-    {"600759", "SH", "10000", OrderDirection::Buy, 2.5, 1000},
-    {"600759", "SH", "10000", OrderDirection::Buy, 2.51, 1000},
-    {"600759", "SH", "10000", OrderDirection::Buy, 2.52, 1000},
-    {"600759", "SH", "10000", OrderDirection::Buy, 2.53, 1000},
-    {"600759", "SH", "10000", OrderDirection::Sell, 2.54, 1000},
-    {"600759", "SH", "10000", OrderDirection::Sell, 2.55, 1000},
-    {"600759", "SH", "10000", OrderDirection::Sell, 2.56, 1000},
-    {"600759", "SH", "10000", OrderDirection::Sell, 2.57, 1000},
-    {"600759", "SH", "10000", OrderDirection::Sell, 2.58, 1000}
+    {"600759", "SH", "10001", OrderDirection::Buy, 2.5, 1000},
+    {"600759", "SH", "10002", OrderDirection::Buy, 2.51, 1000},
+    {"600759", "SH", "10003", OrderDirection::Buy, 2.52, 1000},
+    {"600759", "SH", "10004", OrderDirection::Buy, 2.53, 1000},
+    {"600759", "SH", "10005", OrderDirection::Sell, 2.54, 1000},
+    {"600759", "SH", "10006", OrderDirection::Sell, 2.55, 1000},
+    {"600759", "SH", "10007", OrderDirection::Sell, 2.56, 1000},
+    {"600759", "SH", "10008", OrderDirection::Sell, 2.57, 1000},
+    {"600759", "SH", "10009", OrderDirection::Sell, 2.58, 1000},
+    {"600759", "SH", "10010", OrderDirection::Buy, 2.56, 2200}
   };
   while (!stop_) {
     for (auto& o : ov) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
       std::unique_lock<std::mutex> lk(cv_mutex_);
-      std::cout << "Push" << std::endl;
       order_queue_.push_back(std::move(o));
       cv_.notify_one();
     }

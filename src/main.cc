@@ -10,7 +10,7 @@ int main(int argc, char** argv)
   auto start = std::chrono::system_clock::now();
   while (true) {
     auto end = std::chrono::system_clock::now();
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() > 10000) {
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() > 20000) {
       m.Stop();
       break;
     }
